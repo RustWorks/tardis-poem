@@ -1,9 +1,12 @@
 // https://github.com/mitsuhiko/redis-rs
 
+use std::collections::HashMap;
+
+use log::info;
 use redis::AsyncCommands;
 use tokio::time::{sleep, Duration};
 
-use tardis::basic::config::{CacheConfig, DBConfig, FrameworkConfig, MQConfig, NoneConfig, TardisConfig, WebServerConfig};
+use tardis::basic::config::{CacheConfig, CacheModuleConfig, DBConfig, FrameworkConfig, MQConfig, MailConfig, OSConfig, SearchConfig, TardisConfig, WebServerConfig};
 use tardis::basic::result::TardisResult;
 use tardis::cache::cache_client::TardisCacheClient;
 use tardis::test::test_container::TardisTestContainer;
@@ -13,7 +16,7 @@ use tardis::TardisFuns;
 async fn test_cache_client() -> TardisResult<()> {
     TardisFuns::init_log()?;
     TardisTestContainer::redis(|url| async move {
-        let mut client = TardisCacheClient::init(&url).await?;
+        let client = TardisCacheClient::init(&url).await?;
         // basic operations
 
         let mut opt_value = client.get("test_key").await?;
@@ -97,18 +100,27 @@ async fn test_cache_client() -> TardisResult<()> {
         assert_eq!(map_result.get("f0").unwrap(), "v0");
         assert_eq!(map_result.get("f3").unwrap(), "1");
 
+        // list operations
+        client.lpush("l", "v1").await?;
+        client.lpush("l", "v2").await?;
+        assert_eq!(client.llen("l").await?, 2);
+        let list_result = client.lrangeall("l").await?;
+        assert_eq!(list_result.len(), 2);
+        assert_eq!(list_result.get(0).unwrap(), "v2");
+        assert_eq!(list_result.get(1).unwrap(), "v1");
+
         // custom
 
-        let mut _s: bool = client.cmd().sadd("s1", "m1").await?;
-        _s = client.cmd().sadd("s1", "m2").await?;
-        let mem: Vec<String> = client.cmd().smembers("s1").await?;
+        let mut _s: bool = client.cmd().await.sadd("s1", "m1").await?;
+        _s = client.cmd().await.sadd("s1", "m2").await?;
+        let mem: Vec<String> = client.cmd().await.smembers("s1").await?;
         assert!(mem.contains(&"m1".to_string()));
         assert!(mem.contains(&"m2".to_string()));
         assert!(!mem.contains(&"m3".to_string()));
 
         // Default test
         TardisFuns::init_conf(TardisConfig {
-            ws: NoneConfig {},
+            cs: Default::default(),
             fw: FrameworkConfig {
                 app: Default::default(),
                 web_server: WebServerConfig {
@@ -116,12 +128,28 @@ async fn test_cache_client() -> TardisResult<()> {
                     ..Default::default()
                 },
                 web_client: Default::default(),
-                cache: CacheConfig { enabled: true, url },
+                cache: CacheConfig {
+                    enabled: true,
+                    url: url.clone(),
+                    modules: HashMap::from([("m1".to_string(), CacheModuleConfig { url: url.clone() })]),
+                },
                 db: DBConfig {
                     enabled: false,
                     ..Default::default()
                 },
                 mq: MQConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                search: SearchConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                mail: MailConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                os: OSConfig {
                     enabled: false,
                     ..Default::default()
                 },
@@ -135,6 +163,30 @@ async fn test_cache_client() -> TardisResult<()> {
         assert_eq!(map_result.get("f2").unwrap(), "v2");
         assert_eq!(map_result.get("f0").unwrap(), "v0");
         assert_eq!(map_result.get("f3").unwrap(), "1");
+
+        let map_result = TardisFuns::cache_by_module("m1").hgetall("h").await?;
+        assert_eq!(map_result.len(), 3);
+        assert_eq!(map_result.get("f2").unwrap(), "v2");
+        assert_eq!(map_result.get("f0").unwrap(), "v0");
+        assert_eq!(map_result.get("f3").unwrap(), "1");
+
+        tokio::spawn(async {
+            let map_result = TardisFuns::cache_by_module("m1").hgetall("h").await.unwrap();
+            assert_eq!(map_result.len(), 3);
+            assert_eq!(map_result.get("f2").unwrap(), "v2");
+            assert_eq!(map_result.get("f0").unwrap(), "v0");
+            assert_eq!(map_result.get("f3").unwrap(), "1");
+            info!("cache_by_module m1 hgetall done");
+        })
+        .await
+        .unwrap();
+
+        // flush
+
+        client.set("flush_test", "测试").await?;
+        assert!(client.exists("flush_test").await?);
+        client.flushdb().await?;
+        assert!(!client.exists("flush_test").await?);
 
         Ok(())
     })

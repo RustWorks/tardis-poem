@@ -2,49 +2,53 @@ use std::collections::HashMap;
 use std::future::Future;
 
 use amq_protocol_types::{AMQPValue, LongString, ShortString};
+use futures_util::lock::Mutex;
 use futures_util::stream::StreamExt;
 use lapin::{options::*, types::FieldTable, BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind};
-use log::{error, info, trace};
 use url::Url;
 
 use crate::basic::config::FrameworkConfig;
 use crate::basic::error::TardisError;
 use crate::basic::result::TardisResult;
+use crate::log::{error, info, trace};
 
 pub struct TardisMQClient {
     con: Connection,
-    channels: Vec<Channel>,
-    shutdown_flag: bool,
+    channels: Mutex<Vec<Channel>>,
 }
 
 impl TardisMQClient {
-    pub async fn init_by_conf(conf: &FrameworkConfig) -> TardisResult<TardisMQClient> {
-        TardisMQClient::init(&conf.mq.url).await
+    pub async fn init_by_conf(conf: &FrameworkConfig) -> TardisResult<HashMap<String, TardisMQClient>> {
+        let mut clients = HashMap::new();
+        clients.insert("".to_string(), TardisMQClient::init(&conf.mq.url).await?);
+        for (k, v) in &conf.mq.modules {
+            clients.insert(k.to_string(), TardisMQClient::init(&v.url).await?);
+        }
+        Ok(clients)
     }
 
     pub async fn init(str_url: &str) -> TardisResult<TardisMQClient> {
-        let url = Url::parse(str_url)?;
+        let url = Url::parse(str_url).map_err(|_| TardisError::BadRequest(format!("[Tardis.MQClient] Invalid url {}", str_url)))?;
         info!("[Tardis.MQClient] Initializing, host:{}, port:{}", url.host_str().unwrap_or(""), url.port().unwrap_or(0));
         let con = Connection::connect(str_url, ConnectionProperties::default().with_connection_name("tardis".into())).await?;
         info!("[Tardis.MQClient] Initialized, host:{}, port:{}", url.host_str().unwrap_or(""), url.port().unwrap_or(0));
         Ok(TardisMQClient {
             con,
-            channels: Vec::new(),
-            shutdown_flag: false,
+            channels: Mutex::new(Vec::new()),
         })
     }
 
-    pub async fn close(&mut self) -> TardisResult<()> {
+    pub async fn close(&self) -> TardisResult<()> {
         info!("[Tardis.MQClient] Shutdown...");
-        self.shutdown_flag = true;
-        for channel in self.channels.iter() {
+        let channels = self.channels.lock().await;
+        for channel in channels.iter() {
             channel.close(0u16, "Shutdown AMQP Channel").await?;
         }
         self.con.close(0u16, "Shutdown AMQP Connection").await?;
         Ok(())
     }
 
-    pub async fn request(&mut self, address: &str, message: String, header: &HashMap<String, String>) -> TardisResult<()> {
+    pub async fn request(&self, address: &str, message: String, header: &HashMap<String, String>) -> TardisResult<()> {
         trace!("[Tardis.MQClient] Request, queue:{}, message:{}", address, message);
         let channel = self.con.create_channel().await?;
         channel.confirm_select(ConfirmSelectOptions::default()).await?;
@@ -70,7 +74,7 @@ impl TardisMQClient {
         }
     }
 
-    pub async fn response<F, T>(&mut self, address: &str, fun: F) -> TardisResult<()>
+    pub async fn response<F, T>(&self, address: &str, fun: F) -> TardisResult<()>
     where
         F: Fn((HashMap<String, String>, String)) -> T + Send + Sync + 'static,
         T: Future<Output = TardisResult<()>> + Send + 'static,
@@ -104,11 +108,11 @@ impl TardisMQClient {
                 FieldTable::default(),
             )
             .await?;
-        self.channels.push(channel);
+        self.channels.lock().await.push(channel);
         self.process(address.to_string(), consumer, fun).await
     }
 
-    pub async fn publish(&mut self, topic: &str, message: String, header: &HashMap<String, String>) -> TardisResult<()> {
+    pub async fn publish(&self, topic: &str, message: String, header: &HashMap<String, String>) -> TardisResult<()> {
         trace!("[Tardis.MQClient] Publish, queue:{}, message:{}", topic, message);
         let channel = self.con.create_channel().await?;
         channel.confirm_select(ConfirmSelectOptions::default()).await?;
@@ -134,7 +138,7 @@ impl TardisMQClient {
         }
     }
 
-    pub async fn subscribe<F, T>(&mut self, topic: &str, fun: F) -> TardisResult<()>
+    pub async fn subscribe<F, T>(&self, topic: &str, fun: F) -> TardisResult<()>
     where
         F: Fn((HashMap<String, String>, String)) -> T + Send + Sync + 'static,
         T: Future<Output = TardisResult<()>> + Send + 'static,
@@ -172,11 +176,11 @@ impl TardisMQClient {
                 FieldTable::default(),
             )
             .await?;
-        self.channels.push(channel);
+        self.channels.lock().await.push(channel);
         self.process(topic.to_string(), consumer, fun).await
     }
 
-    async fn declare_exchange(&mut self, channel: &Channel, topic: &str) -> TardisResult<()> {
+    async fn declare_exchange(&self, channel: &Channel, topic: &str) -> TardisResult<()> {
         channel
             .exchange_declare(
                 topic,
@@ -194,7 +198,7 @@ impl TardisMQClient {
         Ok(())
     }
 
-    async fn process<F, T>(&mut self, topic_or_address: String, mut consumer: Consumer, fun: F) -> TardisResult<()>
+    async fn process<F, T>(&self, topic_or_address: String, mut consumer: Consumer, fun: F) -> TardisResult<()>
     where
         F: Fn((HashMap<String, String>, String)) -> T + Send + Sync + 'static,
         T: Future<Output = TardisResult<()>> + Send + 'static,
@@ -249,13 +253,6 @@ impl TardisMQClient {
         Ok(())
     }
 }
-
-// impl Drop for TardisMQClient {
-//     fn drop(&mut self) {
-//         #[allow(unused)]
-//         self.close();
-//     }
-// }
 
 impl From<lapin::Error> for TardisError {
     fn from(error: lapin::Error) -> Self {

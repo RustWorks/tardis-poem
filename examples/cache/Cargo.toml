@@ -5,11 +5,7 @@ authors = ["gudaoxuri"]
 edition = "2021"
 
 [dependencies]
-serde = { version = "^1", features = ["derive"] }
-tokio = { version = "1.15.0", features = ["macros", "time", "rt-multi-thread"] }
 tardis = { path = "../..", features = ["cache", "test"] }
-# Example only
-testcontainers = { version = "^0" }
 
 
 

@@ -1,0 +1,12 @@
+[fw.app]
+id = "perf-test"
+name = "性能测试"
+desc = "性能测试"
+version = "1.0.0"
+
+[fw.web_server]
+port = 8089
+doc_urls = [["test env", "http://localhost:8089/"]]
+
+[fw.db]
+url = "mysql://root:123456@localhost:3306/test"

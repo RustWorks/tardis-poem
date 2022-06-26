@@ -1,16 +1,16 @@
 // https://github.com/seanmonstar/reqwest
 
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
 
-use tardis::basic::config::{CacheConfig, DBConfig, FrameworkConfig, MQConfig, NoneConfig, TardisConfig};
+use tardis::basic::config::{CacheConfig, DBConfig, FrameworkConfig, MQConfig, MailConfig, OSConfig, SearchConfig, TardisConfig};
 use tardis::basic::result::TardisResult;
+use tardis::serde::{Deserialize, Serialize};
 use tardis::TardisFuns;
 
 #[tokio::test]
 async fn test_web_client() -> TardisResult<()> {
     TardisFuns::init_conf(TardisConfig {
-        ws: NoneConfig {},
+        cs: Default::default(),
         fw: FrameworkConfig {
             app: Default::default(),
             web_server: Default::default(),
@@ -24,6 +24,18 @@ async fn test_web_client() -> TardisResult<()> {
                 ..Default::default()
             },
             mq: MQConfig {
+                enabled: false,
+                ..Default::default()
+            },
+            search: SearchConfig {
+                enabled: false,
+                ..Default::default()
+            },
+            mail: MailConfig {
+                enabled: false,
+                ..Default::default()
+            },
+            os: OSConfig {
                 enabled: false,
                 ..Default::default()
             },
@@ -44,7 +56,7 @@ async fn test_web_client() -> TardisResult<()> {
     assert!(response.body.unwrap().contains("Tardis"));
 
     let response = TardisFuns::web_client()
-        .delete(
+        .delete_to_void(
             "https://httpbin.org/delete",
             Some([("User-Agent".to_string(), "Tardis".to_string())].iter().cloned().collect()),
         )

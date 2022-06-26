@@ -1,13 +1,13 @@
-use serde::{Deserialize, Serialize};
-
-use tardis::basic::config::NoneConfig;
 use tardis::basic::result::TardisResult;
+use tardis::serde::{self, Deserialize, Serialize};
+use tardis::serde_json;
+use tardis::tokio;
 use tardis::TardisFuns;
 
 #[tokio::main]
 async fn main() -> TardisResult<()> {
     // Initial configuration
-    TardisFuns::init::<NoneConfig>("").await?;
+    TardisFuns::init("").await?;
 
     // Simple get request
     let response = TardisFuns::web_client().get_to_str("http://httpbin.org/get", None).await?;
@@ -37,6 +37,7 @@ async fn main() -> TardisResult<()> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "self::serde")]
 struct Post {
     id: Option<i32>,
     title: String,

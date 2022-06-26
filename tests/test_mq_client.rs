@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use tardis::basic::config::{CacheConfig, DBConfig, FrameworkConfig, MQConfig, NoneConfig, TardisConfig, WebServerConfig};
+use tardis::basic::config::{CacheConfig, DBConfig, FrameworkConfig, MQConfig, MQModuleConfig, MailConfig, OSConfig, SearchConfig, TardisConfig, WebServerConfig};
 use tardis::basic::result::TardisResult;
 use tardis::test::test_container::TardisTestContainer;
 use tardis::TardisFuns;
@@ -16,7 +16,7 @@ async fn test_mq_client() -> TardisResult<()> {
     TardisTestContainer::rabbit(|url| async move {
         // Default test
         TardisFuns::init_conf(TardisConfig {
-            ws: NoneConfig {},
+            cs: Default::default(),
             fw: FrameworkConfig {
                 app: Default::default(),
                 web_server: WebServerConfig {
@@ -32,13 +32,30 @@ async fn test_mq_client() -> TardisResult<()> {
                     enabled: false,
                     ..Default::default()
                 },
-                mq: MQConfig { enabled: true, url },
+                mq: MQConfig {
+                    enabled: true,
+                    url: url.clone(),
+                    modules: HashMap::from([("m1".to_string(), MQModuleConfig { url: url.clone() })]),
+                },
+                search: SearchConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                mail: MailConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                os: OSConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
                 adv: Default::default(),
             },
         })
         .await?;
 
-        let client = TardisFuns::mq();
+        TardisFuns::mq();
+        let client = TardisFuns::mq_by_module("m1");
 
         client
             .response("test-addr", |(header, msg)| async move {
@@ -99,7 +116,7 @@ async fn test_mq_client() -> TardisResult<()> {
             }
         }
 
-        TardisFuns::shutdown().await?;
+        client.close().await?;
         Ok(())
     })
     .await

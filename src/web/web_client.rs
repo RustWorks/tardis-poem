@@ -1,29 +1,46 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use log::info;
 use reqwest::{Client, Method, Response};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 
 use crate::basic::error::TardisError;
 use crate::basic::result::TardisResult;
-use crate::FrameworkConfig;
+use crate::log::info;
+use crate::serde::de::DeserializeOwned;
+use crate::serde::Serialize;
+use crate::{FrameworkConfig, TardisFuns};
 
 pub struct TardisWebClient {
+    default_headers: Vec<(String, String)>,
     client: Client,
 }
 
 impl TardisWebClient {
-    pub fn init_by_conf(conf: &FrameworkConfig) -> TardisResult<TardisWebClient> {
-        TardisWebClient::init(conf.web_client.connect_timeout_sec)
+    pub fn init_by_conf(conf: &FrameworkConfig) -> TardisResult<HashMap<String, TardisWebClient>> {
+        let mut clients = HashMap::new();
+        clients.insert("".to_string(), TardisWebClient::init(conf.web_client.connect_timeout_sec)?);
+        for (k, v) in &conf.web_client.modules {
+            clients.insert(k.to_string(), TardisWebClient::init(v.connect_timeout_sec)?);
+        }
+        Ok(clients)
     }
 
     pub fn init(connect_timeout_sec: u64) -> TardisResult<TardisWebClient> {
         info!("[Tardis.WebClient] Initializing");
         let client = reqwest::Client::builder().danger_accept_invalid_certs(true).connect_timeout(Duration::from_secs(connect_timeout_sec)).https_only(false).build()?;
         info!("[Tardis.WebClient] Initialized");
-        TardisResult::Ok(TardisWebClient { client })
+        TardisResult::Ok(TardisWebClient {
+            client,
+            default_headers: Vec::new(),
+        })
+    }
+
+    pub fn set_default_header(&mut self, key: &str, value: &str) {
+        self.default_headers.push((key.to_string(), value.to_string()));
+    }
+
+    pub fn remove_default_header(&mut self, key: &str) {
+        self.default_headers.retain(|(k, _)| k != key);
     }
 
     pub async fn get_to_str(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<String>> {
@@ -36,14 +53,24 @@ impl TardisWebClient {
         self.to_json::<T>(code, headers, response).await
     }
 
-    pub async fn head(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<()>> {
+    pub async fn head_to_void(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<()>> {
         let (code, headers, _) = self.request::<()>(Method::HEAD, url, headers, None, None).await?;
         Ok(TardisHttpResponse { code, headers, body: None })
     }
 
-    pub async fn delete(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<()>> {
+    pub async fn head<T: DeserializeOwned>(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<T>> {
+        let (code, headers, response) = self.request::<()>(Method::HEAD, url, headers, None, None).await?;
+        self.to_json::<T>(code, headers, response).await
+    }
+
+    pub async fn delete_to_void(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<()>> {
         let (code, headers, _) = self.request::<()>(Method::DELETE, url, headers, None, None).await?;
         Ok(TardisHttpResponse { code, headers, body: None })
+    }
+
+    pub async fn delete<T: DeserializeOwned>(&self, url: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<T>> {
+        let (code, headers, response) = self.request::<()>(Method::DELETE, url, headers, None, None).await?;
+        self.to_json::<T>(code, headers, response).await
     }
 
     pub async fn post_str_to_str(&self, url: &str, body: &str, headers: Option<Vec<(String, String)>>) -> TardisResult<TardisHttpResponse<String>> {
@@ -114,7 +141,11 @@ impl TardisWebClient {
         body: Option<&B>,
         str_body: Option<&str>,
     ) -> TardisResult<(u16, HashMap<String, String>, Response)> {
-        let mut result = self.client.request(method, url);
+        let formatted_url = TardisFuns::uri.format(url)?;
+        let mut result = self.client.request(method, formatted_url);
+        for (key, value) in &self.default_headers {
+            result = result.header(key, value);
+        }
         if let Some(headers) = headers {
             for (key, value) in headers {
                 result = result.header(key, value);
