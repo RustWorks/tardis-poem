@@ -1,9 +1,9 @@
 [package]
 name = "tardis-example-reldb"
 version = "0.1.0"
-authors = ["gudaoxuri"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+publish = false
 
 [dependencies]
-tardis = { path = "../..", features = ["reldb", "test"] }
-sea-orm = { version = "^0.8", features = ["macros"] }
+tardis = { path = "../../tardis", features = ["reldb", "test"] }

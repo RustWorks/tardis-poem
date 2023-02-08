@@ -2,18 +2,20 @@ use serde::{Deserialize, Serialize};
 
 use tardis::basic::error::TardisError;
 use tardis::basic::field::TrimString;
+use tardis::db::sea_orm;
+use tardis::db::sea_orm::sea_query::Query as DbQuery;
 use tardis::db::sea_orm::*;
-use tardis::db::sea_query::Query as DbQuery;
 use tardis::web::context_extractor::TardisContextExtractor;
+use tardis::web::poem_openapi;
 use tardis::web::poem_openapi::param::Query;
-use tardis::web::poem_openapi::{param::Path, payload::Json, Object, OpenApi};
+use tardis::web::poem_openapi::{param::Path, payload::Json};
 use tardis::web::web_resp::{TardisApiResult, Void};
 use tardis::web::web_resp::{TardisPage, TardisResp};
 use tardis::TardisFuns;
 
 use crate::domain::todos;
 
-#[derive(Object, FromQueryResult, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, sea_orm::FromQueryResult, Serialize, Deserialize, Debug)]
 struct TodoDetailResp {
     id: i32,
     code: String,
@@ -21,7 +23,7 @@ struct TodoDetailResp {
     done: bool,
 }
 
-#[derive(Object, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, Serialize, Deserialize, Debug)]
 struct TodoAddReq {
     #[oai(validator(min_length = "2", max_length = "255"))]
     code: TrimString,
@@ -30,7 +32,7 @@ struct TodoAddReq {
     done: bool,
 }
 
-#[derive(Object, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, Serialize, Deserialize, Debug)]
 struct TodoModifyReq {
     #[oai(validator(min_length = "2", max_length = "255"))]
     description: Option<String>,
@@ -39,7 +41,7 @@ struct TodoModifyReq {
 
 pub struct TodoApi;
 
-#[OpenApi(prefix_path = "/todo")]
+#[poem_openapi::OpenApi(prefix_path = "/todo")]
 impl TodoApi {
     // curl -X POST "http://127.0.0.1:8089/todo" \
     //  -H "Accept: application/json" \
@@ -47,7 +49,7 @@ impl TodoApi {
     //  -H "Tardis-Context: eyJvd25fcGF0aHMiOiAiIiwiYWsiOiAiIiwib3duZXIiOiAiIiwicm9sZXMiOiBbXSwiZ3JvdXBzIjogW119" \
     //  -d '{"code":"  测试2  ","description":"AA","done":false}'
     #[oai(path = "/", method = "post")]
-    async fn add(&self, todo_add_req: Json<TodoAddReq>, cxt: TardisContextExtractor) -> TardisApiResult<i32> {
+    async fn add(&self, todo_add_req: Json<TodoAddReq>, ctx: TardisContextExtractor) -> TardisApiResult<i32> {
         let todo_id = TardisFuns::reldb()
             .conn()
             .insert_one(
@@ -57,7 +59,7 @@ impl TodoApi {
                     done: Set(todo_add_req.done),
                     ..Default::default()
                 },
-                &cxt.0,
+                &ctx.0,
             )
             .await?
             .last_insert_id;
@@ -77,7 +79,7 @@ impl TodoApi {
                     .and_where(todos::Column::Id.eq(id.0)),
             )
             .await?
-            .ok_or_else(|| TardisError::NotFound("Not found".to_string()))?;
+            .ok_or_else(|| TardisError::not_found("Not found", ""))?;
         TardisResp::ok(todo)
     }
 
@@ -111,7 +113,7 @@ impl TodoApi {
     //  -H "Content-Type: application/json" \
     //  -d '{"description":"AAAAAAAA","done":false}'
     #[oai(path = "/:id", method = "put")]
-    async fn update(&self, id: Path<i32>, todo_modify_req: Json<TodoModifyReq>, cxt: TardisContextExtractor) -> TardisApiResult<Void> {
+    async fn update(&self, id: Path<i32>, todo_modify_req: Json<TodoModifyReq>, ctx: TardisContextExtractor) -> TardisApiResult<Void> {
         TardisFuns::reldb()
             .conn()
             .update_one(
@@ -121,7 +123,7 @@ impl TodoApi {
                     done: todo_modify_req.done.map(Set).unwrap_or(NotSet),
                     ..Default::default()
                 },
-                &cxt.0,
+                &ctx.0,
             )
             .await?;
         TardisResp::ok(Void {})

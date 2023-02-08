@@ -1,15 +1,11 @@
 [package]
 name = "tardis-example-todos"
 version = "0.1.0"
-authors = ["gudaoxuri"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+publish = false
 
 [dependencies]
-serde = { version = "^1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 # Tardis Functions
-tardis = { path = "../..", features = ["web-server", "reldb", "test"] }
-# Web server dependencies
-poem-openapi = { version = "^2" }
-# Reldb dependencies
-sea-orm = { version = "^0.8", features = ["macros"] }
-
+tardis = { path = "../../tardis", features = ["web-server", "reldb", "test"] }

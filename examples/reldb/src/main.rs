@@ -17,7 +17,7 @@ async fn main() -> TardisResult<()> {
     let docker = clients::Cli::default();
     let mysql_container = TardisTestContainer::mysql_custom(None, &docker);
     let port = mysql_container.get_host_port_ipv4(3306);
-    let url = format!("mysql://root:123456@localhost:{}/test", port);
+    let url = format!("mysql://root:123456@localhost:{port}/test");
     env::set_var("TARDIS_FW.DB.URL", url);
 
     env::set_var("RUST_LOG", "debug");
@@ -30,12 +30,13 @@ async fn main() -> TardisResult<()> {
 
     // --------------------------------------------------
 
-    let cxt = TardisContext {
+    let ctx = TardisContext {
         own_paths: "".to_string(),
         ak: "".to_string(),
         owner: "".to_string(),
         roles: vec![],
         groups: vec![],
+        ext: Default::default(),
     };
 
     // Create table
@@ -51,7 +52,7 @@ async fn main() -> TardisResult<()> {
             name: Set("tenant1".to_string()),
             ..Default::default()
         },
-        &cxt,
+        &ctx,
     )
     .await?;
 
@@ -63,7 +64,7 @@ async fn main() -> TardisResult<()> {
             tenant_id: Set(tenant.id.clone()),
             ..Default::default()
         },
-        &cxt,
+        &ctx,
     )
     .await?;
 
@@ -73,7 +74,7 @@ async fn main() -> TardisResult<()> {
             tenant_id: Set(tenant.id.clone()),
             ..Default::default()
         },
-        &cxt,
+        &ctx,
     )
     .await?;
 
@@ -83,7 +84,7 @@ async fn main() -> TardisResult<()> {
             tenant_id: Set(tenant.id.clone()),
             ..Default::default()
         },
-        &cxt,
+        &ctx,
     )
     .await?;
 
@@ -112,7 +113,7 @@ async fn main() -> TardisResult<()> {
                 name: Set("account1".to_string()),
                 ..Default::default()
             },
-            &cxt,
+            &ctx,
         )
         .await?
         .last_insert_id;

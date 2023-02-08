@@ -1,15 +1,17 @@
 use tardis::basic::dto::TardisContext;
+use tardis::db::sea_orm;
+use tardis::db::sea_orm::sea_query::Query as DbQuery;
 use tardis::db::sea_orm::*;
-use tardis::db::sea_query::Query as DbQuery;
 use tardis::serde::{self, Deserialize, Serialize};
+use tardis::web::poem_openapi;
 use tardis::web::poem_openapi::param::Query;
-use tardis::web::poem_openapi::{param::Path, payload::Json, Object, OpenApi};
+use tardis::web::poem_openapi::{param::Path, payload::Json};
 use tardis::web::web_resp::{TardisApiResult, TardisPage, TardisResp};
 use tardis::TardisFuns;
 
 use crate::domain::todos;
 
-#[derive(Object, FromQueryResult, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, sea_orm::FromQueryResult, Serialize, Deserialize, Debug)]
 #[serde(crate = "self::serde")]
 struct TodoDetailResp {
     id: i32,
@@ -17,7 +19,7 @@ struct TodoDetailResp {
     done: bool,
 }
 
-#[derive(Object, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, Serialize, Deserialize, Debug)]
 #[serde(crate = "self::serde")]
 struct TodoAddReq {
     #[oai(validator(min_length = "2", max_length = "255"))]
@@ -25,7 +27,7 @@ struct TodoAddReq {
     done: bool,
 }
 
-#[derive(Object, Serialize, Deserialize, Debug)]
+#[derive(poem_openapi::Object, Serialize, Deserialize, Debug)]
 #[serde(crate = "self::serde")]
 struct TodoModifyReq {
     #[oai(validator(min_length = "2", max_length = "255"))]
@@ -35,16 +37,17 @@ struct TodoModifyReq {
 
 pub struct TodoApi;
 
-#[OpenApi]
+#[poem_openapi::OpenApi]
 impl TodoApi {
     #[oai(path = "/todo", method = "post")]
     async fn add(&self, todo_add_req: Json<TodoAddReq>) -> TardisApiResult<i32> {
-        let cxt = TardisContext {
+        let ctx = TardisContext {
             own_paths: "".to_string(),
             ak: "".to_string(),
             owner: "".to_string(),
             roles: vec![],
             groups: vec![],
+            ext: Default::default(),
         };
         let todo_id = TardisFuns::reldb()
             .conn()
@@ -54,7 +57,7 @@ impl TodoApi {
                     done: Set(todo_add_req.done),
                     ..Default::default()
                 },
-                &cxt,
+                &ctx,
             )
             .await?
             .last_insert_id;
@@ -97,12 +100,13 @@ impl TodoApi {
 
     #[oai(path = "/todo/:id", method = "put")]
     async fn update(&self, id: Path<i32>, todo_modify_req: Json<TodoModifyReq>) -> TardisApiResult<u64> {
-        let cxt = TardisContext {
+        let ctx = TardisContext {
             own_paths: "".to_string(),
             ak: "".to_string(),
             owner: "".to_string(),
             roles: vec![],
             groups: vec![],
+            ext: Default::default(),
         };
         TardisFuns::reldb()
             .conn()
@@ -112,7 +116,7 @@ impl TodoApi {
                     description: todo_modify_req.description.as_ref().map(|v| Set(v.clone())).unwrap_or(NotSet),
                     done: todo_modify_req.done.map(Set).unwrap_or(NotSet),
                 },
-                &cxt,
+                &ctx,
             )
             .await?;
         TardisResp::ok(0)

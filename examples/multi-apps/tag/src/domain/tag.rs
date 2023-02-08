@@ -1,8 +1,9 @@
 use tardis::basic::dto::TardisContext;
 use tardis::db::reldb_client::TardisActiveModel;
+use tardis::db::sea_orm;
 use tardis::db::sea_orm::*;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "tag")]
 pub struct Model {
     #[sea_orm(primary_key)]
@@ -12,7 +13,7 @@ pub struct Model {
 }
 
 impl TardisActiveModel for ActiveModel {
-    fn fill_cxt(&mut self, _: &TardisContext, _: bool) {}
+    fn fill_ctx(&mut self, _: &TardisContext, _: bool) {}
 }
 
 impl ActiveModelBehavior for ActiveModel {}

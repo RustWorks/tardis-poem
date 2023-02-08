@@ -1,9 +1,10 @@
 use tardis::basic::dto::TardisContext;
 use tardis::db::reldb_client::TardisActiveModel;
+use tardis::db::sea_orm;
 use tardis::db::sea_orm::*;
 use tardis::TardisFuns;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "test_account")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -25,7 +26,7 @@ impl Related<super::app::Entity> for super::account::Entity {
 }
 
 impl TardisActiveModel for ActiveModel {
-    fn fill_cxt(&mut self, _: &TardisContext, is_insert: bool) {
+    fn fill_ctx(&mut self, _: &TardisContext, is_insert: bool) {
         if is_insert {
             self.id = Set(TardisFuns::field.nanoid());
         }

@@ -1,6 +1,5 @@
 use std::env;
 use std::time::Duration;
-
 use tardis::basic::result::TardisResult;
 use tardis::test::test_container::TardisTestContainer;
 use tardis::testcontainers::clients;
@@ -14,7 +13,7 @@ async fn main() -> TardisResult<()> {
     let docker = clients::Cli::default();
     let redis_container = TardisTestContainer::redis_custom(&docker);
     let port = redis_container.get_host_port_ipv4(6379);
-    let url = format!("redis://127.0.0.1:{}/0", port);
+    let url = format!("redis://127.0.0.1:{port}/0");
     env::set_var("TARDIS_FW.CACHE.URL", url.clone());
     env::set_var("TARDIS_FW.CACHE.MODULES.M1.URL", url.clone());
 
@@ -79,8 +78,8 @@ async fn main() -> TardisResult<()> {
     assert_eq!(num_value, 1);
 
     client.expire_at("test_key_xp", 1893430861).await?;
-    num_value = client.ttl("test_key_xp").await?;
-    println!("Expire AT : {}", num_value);
+    let num_value = client.ttl("test_key_xp").await?;
+    println!("Expire AT : {num_value}");
     assert!(num_value > 0);
 
     // hash operations
