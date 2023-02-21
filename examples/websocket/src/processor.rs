@@ -46,7 +46,7 @@ impl Page {
             sendForm.hidden = false;
             msgsArea.hidden = false;
             msgInput.focus();
-            ws = new WebSocket("ws://" + location.host + "/ws/echo/" + nameInput.value);
+            ws = new WebSocket("wss://" + location.host + "/ws/echo/" + nameInput.value);
             ws.onmessage = function(event) {
                 msgsArea.value += event.data + "\r\n";
             }
@@ -95,7 +95,7 @@ impl Page {
             sendForm.hidden = false;
             msgsArea.hidden = false;
             msgInput.focus();
-            ws = new WebSocket("ws://" + location.host + "/ws/broadcast/" + nameInput.value);
+            ws = new WebSocket("wss://" + location.host + "/ws/broadcast/" + nameInput.value);
             ws.onmessage = function(event) {
                 msgsArea.value += event.data + "\r\n";
             }
@@ -131,14 +131,15 @@ impl Page {
         ws_broadcast(
             vec![name.0],
             false,
+            false,
             HashMap::from([("some_key".to_string(), "ext_value".to_string())]),
             websocket,
             sender.clone(),
             |req_msg, ext| async move {
-                let exmaple_msg = TardisFuns::json.json_to_obj::<WebsocketExample>(req_msg.msg).unwrap();
+                let example_msg = TardisFuns::json.json_to_obj::<WebsocketExample>(req_msg.msg).unwrap();
                 Some(TardisWebsocketResp {
-                    msg: TardisFuns::json.obj_to_json(&TardisResult::Ok(format!("echo:{}, ext info:{}", exmaple_msg.msg, ext.get("some_key").unwrap()))).unwrap(),
-                    to_avatars: if exmaple_msg.to.is_empty() { vec![] } else { vec![exmaple_msg.to] },
+                    msg: TardisFuns::json.obj_to_json(&TardisResult::Ok(format!("echo:{}, ext info:{}", example_msg.msg, ext.get("some_key").unwrap()))).unwrap(),
+                    to_avatars: if example_msg.to.is_empty() { vec![] } else { vec![example_msg.to] },
                     ignore_avatars: vec![],
                 })
             },
